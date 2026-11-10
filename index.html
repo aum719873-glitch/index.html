@@ -996,5 +996,55 @@
             showToast(`เข้าสู่ระบบเป็น ${currentUser.username}`, 'info');
         }
     </script>
+
+
+    <!-- 🔊 เสียงต้อนรับเข้าเว็บ: วางก่อน </body> แก้แค่ SHOP_NAME -->
+<script>
+(function () {
+    // ===== แก้เฉพาะตรงนี้ =====
+    var SHOP_NAME = 'roblox';      // ใส่ชื่อร้านของเว็บนั้น (เว้นว่าง '' ได้)
+    var ONCE_PER_SESSION = true;     // true = พูดครั้งเดียวต่อการเข้าเว็บ, false = พูดทุกครั้งที่โหลดหน้า
+    // ===========================
+
+    var TEXT = 'ยินดีต้อนรับเข้าสู่ร้านจำหน่ายไอดีเกม' + (SHOP_NAME ? ' ' + SHOP_NAME : '') +
+        ' สนใจไอดีเกมไหน เชิญเลือกซื้อได้เลยนะครับ' +
+        ' เป็นระบบแบบกดซื้อแล้วรอชำระเงินกับแอดมินโดยตรง' +
+        ' เพื่อความปลอดภัยต่อหน้าเว็บและตัวลูกค้านะครับ';
+
+    var KEY = 'welcome_voice_done';
+    if (!('speechSynthesis' in window)) return;
+    try { if (ONCE_PER_SESSION && sessionStorage.getItem(KEY)) return; } catch (e) {}
+
+    var spoken = false;
+
+    function speak() {
+        try {
+            var s = window.speechSynthesis;
+            s.cancel();
+            var u = new SpeechSynthesisUtterance(TEXT);
+            u.lang = 'th-TH';
+            u.volume = 1;
+            u.rate = 0.95;
+            u.pitch = 1;
+            var th = s.getVoices().find(function (v) { return /^th/i.test(v.lang); });
+            if (th) u.voice = th;
+            u.onstart = function () {
+                spoken = true;
+                try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+            };
+            s.speak(u);
+        } catch (e) {}
+    }
+
+    // ลองพูดตอนเปิดหน้า ถ้าเบราว์เซอร์บล็อก จะพูดเมื่อผู้ใช้แตะ/คลิก/กดแป้นครั้งแรก
+    speak();
+    var ev = ['pointerdown', 'keydown', 'touchstart'];
+    function once() {
+        ev.forEach(function (e) { document.removeEventListener(e, once); });
+        if (!spoken) speak();
+    }
+    ev.forEach(function (e) { document.addEventListener(e, once, { passive: true }); });
+})();
+</script>
 </body>
 </html>

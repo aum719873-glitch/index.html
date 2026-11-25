@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกส่วนตัว - ล็อกด้วยรหัสลับ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Kanit', sans-serif; background: linear-gradient(135deg, #fff5f9 0%, #eef8ff 50%, #f6efff 100%); min-height: 100vh; }
+        .glass { background: rgba(255,255,255,.75); backdrop-filter: blur(14px); border: 2px solid rgba(255,255,255,.9); }
+        .btn { transition: all .25s cubic-bezier(.175,.885,.32,1.275); }
+        .btn:hover:not(:disabled) { transform: scale(1.05); }
+        .btn:active:not(:disabled) { transform: scale(.96); }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .grad { background: linear-gradient(90deg, #FF65A3, #8A5CF5); }
+        body *:not(input):not(textarea) { -webkit-user-select: none; user-select: none; }
+        .note-text { -webkit-user-select: text !important; user-select: text !important; white-space: pre-wrap; word-break: break-word; }
+    </style>
+</head>
+<body class="text-gray-700 pb-12">
+
+<header class="px-4 pt-5 max-w-2xl mx-auto">
+    <div class="glass rounded-full px-5 py-3 flex items-center justify-between shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full grad flex items-center justify-center text-white"><i class="fa-solid fa-lock"></i></div>
+            <div>
+                <div class="font-bold text-gray-800 leading-tight">บันทึกส่วนตัว</div>
+                <div id="whoami" class="text-[11px] text-pink-400 leading-tight">กำลังเชื่อมต่อ...</div>
+            </div>
+        </div>
+        <button id="lockBtn" onclick="lockNow()" class="btn hidden grad text-white text-xs font-bold px-4 py-2 rounded-full">
+            <i class="fa-solid fa-lock me-1"></i>ล็อก
+        </button>
+    </div>
+</header>
+
+<main class="px-4 max-w-2xl mx-auto mt-6 space-y-5">
+
+    <!-- โหลด -->
+    <section id="sLoading" class="glass rounded-3xl p-10 text-center shadow-lg">
+        <i class="fa-solid fa-spinner fa-spin text-3xl text-pink-400"></i>
+    </section>
+
+    <!-- ตั้งรหัสครั้งแรก -->
+    <section id="sSetup" class="hidden glass rounded-3xl p-6 shadow-lg space-y-4">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🔐</div>
+            <h2 class="text-xl font-bold text-gray-800">ตั้งรหัสลับของคุณ</h2>
+            <p class="text-xs text-gray-500 mt-1">ตัวเลข 4-8 หลัก ใช้เปิดดูบันทึกทุกครั้ง (รหัสนี้ผูกกับบัญชีของคุณเท่านั้น)</p>
+        </div>
+        <input id="setupPin" type="password" inputmode="numeric" maxlength="8" placeholder="รหัสลับ"
+            class="w-full text-center tracking-[.5em] text-xl py-3 rounded-full border-2 border-pink-200 focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white">
+        <input id="setupPin2" type="password" inputmode="numeric" maxlength="8" placeholder="ยืนยันรหัสอีกครั้ง"
+            class="w-full text-center tracking-[.5em] text-xl py-3 rounded-full border-2 border-pink-200 focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white">
+        <p id="setupMsg" class="text-center text-sm text-red-500 min-h-[1.25rem]"></p>
+        <button id="setupBtn" onclick="doSetup()" class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">ตั้งรหัส</button>
+    </section>
+
+    <!-- หน้าใส่รหัสเปิด -->
+    <section id="sLocked" class="hidden glass rounded-3xl p-6 shadow-lg space-y-4">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🔒</div>
+            <h2 class="text-xl font-bold text-gray-800">ใส่รหัสเพื่อเปิดบันทึก</h2>
+        </div>
+        <input id="unlockPin" type="password" inputmode="numeric" maxlength="8" placeholder="••••"
+            onkeydown="if(event.key==='Enter')doUnlock()"
+            class="w-full text-center tracking-[.5em] text-2xl py-3 rounded-full border-2 border-pink-200 focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white">
+        <p id="unlockMsg" class="text-center text-sm text-red-500 min-h-[1.25rem]"></p>
+        <div id="lockInfo" class="hidden text-center bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl p-3 text-sm">
+            ถูกล็อกชั่วคราว รอ <span id="lockCountdown" class="font-extrabold">--:--</span>
+        </div>
+        <button id="unlockBtn" onclick="doUnlock()" class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">
+            <i class="fa-solid fa-lock-open me-1"></i>เปิดดูบันทึก
+        </button>
+        <p class="text-[11px] text-gray-400 text-center">ผิดครบ 5 ครั้งจะถูกล็อก 30 นาที → 1 ชั่วโมง → 2 ชั่วโมง ใส่ถูกเมื่อไหร่ก็เริ่มนับใหม่</p>
+    </section>
+
+    <!-- หน้าบันทึก (ปลดล็อกแล้ว) -->
+    <section id="sOpen" class="hidden space-y-5">
+        <div class="glass rounded-3xl p-5 shadow-lg space-y-3">
+            <h3 class="font-bold text-gray-800"><i class="fa-solid fa-pen text-pink-400 me-2"></i>เขียนบันทึกใหม่</h3>
+            <textarea id="noteInput" rows="5" maxlength="5000" placeholder="พิมพ์ข้อมูลที่ต้องการบันทึก..."
+                class="w-full rounded-2xl border-2 border-pink-200 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white"></textarea>
+            <p id="saveMsg" class="text-sm min-h-[1.25rem]"></p>
+            <button id="saveBtn" onclick="doSave()" class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">
+                <i class="fa-solid fa-floppy-disk me-1"></i>บันทึกถาวร
+            </button>
+        </div>
+
+        <div class="glass rounded-3xl p-5 shadow-lg">
+            <h3 class="font-bold text-gray-800 mb-3"><i class="fa-solid fa-book text-purple-400 me-2"></i>บันทึกของฉัน <span id="noteCount" class="text-xs text-gray-400"></span></h3>
+            <div id="noteList" class="space-y-3"></div>
+            <p id="noteEmpty" class="hidden text-center text-sm text-gray-400 py-6">ยังไม่มีบันทึก</p>
+        </div>
+
+        <details class="glass rounded-3xl p-5 shadow-lg">
+            <summary class="cursor-pointer font-bold text-gray-700 text-sm"><i class="fa-solid fa-key text-sky-400 me-2"></i>เปลี่ยนรหัสลับ</summary>
+            <div class="space-y-3 mt-4">
+                <input id="oldPin" type="password" inputmode="numeric" maxlength="8" placeholder="รหัสเดิม"
+                    class="w-full text-center tracking-[.4em] py-2.5 rounded-full border-2 border-sky-200 bg-white focus:outline-none">
+                <input id="newPin" type="password" inputmode="numeric" maxlength="8" placeholder="รหัสใหม่ (4-8 หลัก)"
+                    class="w-full text-center tracking-[.4em] py-2.5 rounded-full border-2 border-sky-200 bg-white focus:outline-none">
+                <p id="chgMsg" class="text-sm min-h-[1.25rem]"></p>
+                <button onclick="doChange()" class="btn w-full bg-sky-400 text-white font-bold py-2.5 rounded-full">เปลี่ยนรหัส</button>
+            </div>
+        </details>
+
+        <p class="text-[11px] text-gray-400 text-center">ล็อกอัตโนมัติเมื่อไม่ได้ใช้งาน 2 นาที</p>
+    </section>
+
+    <!-- ยังไม่ได้ล็อกอิน -->
+    <section id="sNoLogin" class="hidden glass rounded-3xl p-8 text-center shadow-lg space-y-4">
+        <div class="text-4xl">🙈</div>
+        <h2 class="text-lg font-bold text-gray-800">กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อน</h2>
+        <button onclick="goToMainSite()" class="btn grad text-white font-bold px-8 py-3 rounded-full shadow-lg">ไปหน้าหลัก</button>
+    </section>
+</main>
+
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 border-2 border-pink-200 px-5 py-3 rounded-full shadow-2xl text-sm font-semibold opacity-0 translate-y-20 transition-all duration-300 pointer-events-none"></div>
+
+<script>
+const CONFIG = {
+    SUPABASE_URL: 'https://ztkqtvdllpzjsvlqxzni.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_BkDeJmZYwMys8OP4eMkpVQ_F6hrJ35t',
+    MAIN_SITE_URL: 'https://suphasan887-beep.github.io/index.html/',
+    IDLE_LOCK_SECONDS: 120
+};
+const TOKEN_KEY = 'main_access_token';
+
+const $ = id => document.getElementById(id);
+let authClient = null;   // ใช้ตรวจโทเค็น
+let db = null;           // client ที่แนบโทเค็นผู้ใช้
+let currentUser = null;
+let sessionPin = null;   // เก็บในหน่วยความจำชั่วคราวเท่านั้น ปิดแท็บ/ล็อก = หาย
+let lockUntilMs = 0, lockTimer = null, idleTimer = null, busy = false;
+
+const SCREENS = ['sLoading','sSetup','sLocked','sOpen','sNoLogin'];
+function show(name) {
+    SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== name));
+    $('lockBtn').classList.toggle('hidden', name !== 'sOpen');
+}
+function toast(msg) {
+    const t = $('toast'); t.textContent = msg;
+    t.classList.remove('opacity-0','translate-y-20');
+    setTimeout(() => t.classList.add('opacity-0','translate-y-20'), 2500);
+}
+function goToMainSite() { location.href = CONFIG.MAIN_SITE_URL; }
+function lsKey() { return 'pn_lock_until_' + (currentUser ? currentUser.id : ''); }
+
+async function getToken() {
+    try {
+        const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+        const fromHash = h.get('at');
+        if (fromHash) {
+            sessionStorage.setItem(TOKEN_KEY, fromHash);
+            history.replaceState(null, '', location.pathname + location.search);
+            return fromHash;
+        }
+        const saved = sessionStorage.getItem(TOKEN_KEY);
+        if (saved) return saved;
+        const { data } = await authClient.auth.getSession();
+        return data && data.session ? data.session.access_token : null;
+    } catch (e) { return null; }
+}
+
+async function init() {
+    authClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    const token = await getToken();
+    if (!token) { show('sNoLogin'); $('whoami').textContent = 'ยังไม่ได้เข้าสู่ระบบ'; return; }
+    const { data: { user }, error } = await authClient.auth.getUser(token);
+    if (error || !user) {
+        try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        show('sNoLogin'); $('whoami').textContent = 'ยังไม่ได้เข้าสู่ระบบ'; return;
+    }
+    db = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: 'Bearer ' + token } },
+        auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { data: p } = await db.from('profiles').select('username').eq('id', user.id).maybeSingle();
+    currentUser = { id: user.id, username: (p && p.username) || (user.user_metadata && user.user_metadata.username) || (user.email ? user.email.split('@')[0] : 'ผู้ใช้') };
+    $('whoami').textContent = 'บัญชี: ' + currentUser.username;
+    await refreshStatus();
+}
+
+async function refreshStatus() {
+    const { data, error } = await db.rpc('pn_status');
+    if (error || !data || data.auth === false) {
+        toast('เชื่อมต่อไม่สำเร็จ (ยังไม่ได้รัน SQL หรือโทเค็นหมดอายุ?)');
+        show('sNoLogin'); return;
+    }
+    if (!data.has_pin) { show('sSetup'); return; }
+    show('sLocked');
+    let sec = data.seconds_left || 0;
+    // เครื่องนี้จำเวลาล็อกไว้ด้วย เพื่อแสดงนับถอยหลังได้ทันที (เซิร์ฟเวอร์เป็นตัวตัดสินจริง)
+    if (sec > 0) startCountdown(sec); else { stopCountdown(); try { localStorage.removeItem(lsKey()); } catch (e) {} }
+}
+
+/* ---------- ตั้งรหัส ---------- */
+async function doSetup() {
+    if (busy) return;
+    const a = $('setupPin').value, b = $('setupPin2').value;
+    if (!/^[0-9]{4,8}$/.test(a)) { $('setupMsg').textContent = 'รหัสต้องเป็นตัวเลข 4-8 หลัก'; return; }
+    if (a !== b) { $('setupMsg').textContent = 'รหัสสองช่องไม่ตรงกัน'; return; }
+    busy = true;
+    const { data, error } = await db.rpc('pn_set_pin', { p_pin: a });
+    busy = false;
+    if (error || !data || !data.ok) { $('setupMsg').textContent = 'ตั้งรหัสไม่สำเร็จ ลองใหม่อีกครั้ง'; return; }
+    $('setupPin').value = ''; $('setupPin2').value = ''; $('setupMsg').textContent = '';
+    toast('ตั้งรหัสเรียบร้อย ใส่รหัสเพื่อเปิดบันทึก');
+    show('sLocked');
+}
+
+/* ---------- ล็อก/นับถอยหลัง ---------- */
+function startCountdown(sec) {
+    lockUntilMs = Date.now() + sec * 1000;
+    try { localStorage.setItem(lsKey(), String(lockUntilMs)); } catch (e) {}
+    $('lockInfo').classList.remove('hidden');
+    $('unlockBtn').disabled = true; $('unlockPin').disabled = true;
+    clearInterval(lockTimer);
+    const tick = () => {
+        const left = Math.ceil((lockUntilMs - Date.now()) / 1000);
+        if (left <= 0) { stopCountdown(); $('unlockMsg').textContent = ''; return; }
+        const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), s = left % 60;
+        $('lockCountdown').textContent = (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    };
+    tick(); lockTimer = setInterval(tick, 1000);
+}
+function stopCountdown() {
+    clearInterval(lockTimer); lockUntilMs = 0;
+    $('lockInfo').classList.add('hidden');
+    $('unlockBtn').disabled = false; $('unlockPin').disabled = false;
+}
+
+/* ---------- เปิดดู ---------- */
+function handleFail(data, msgEl) {
+    if (data && data.locked) {
+        msgEl.textContent = 'ใส่รหัสผิดครบ 5 ครั้ง ถูกล็อกชั่วคราว';
+        startCountdown(data.seconds_left || 1800);
+        lockNow(true);
+    } else if (data && data.tries_left !== undefined) {
+        msgEl.textContent = 'รหัสไม่ถูกต้อง เหลืออีก ' + data.tries_left + ' ครั้ง';
+    } else {
+        msgEl.textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
+    }
+}
+
+async function doUnlock() {
+    if (busy || lockUntilMs > Date.now()) return;
+    const pin = $('unlockPin').value;
+    if (!pin) { $('unlockMsg').textContent = 'กรุณาใส่รหัส'; return; }
+    busy = true;
+    const { data, error } = await db.rpc('pn_unlock', { p_pin: pin });
+    busy = false;
+    $('unlockPin').value = '';
+    if (error || !data) { $('unlockMsg').textContent = 'เชื่อมต่อไม่สำเร็จ'; return; }
+    if (!data.ok) { handleFail(data, $('unlockMsg')); return; }
+    sessionPin = pin;
+    $('unlockMsg').textContent = '';
+    try { localStorage.removeItem(lsKey()); } catch (e) {}
+    renderNotes(data.notes || []);
+    show('sOpen');
+    resetIdle();
+}
+
+function lockNow(silent) {
+    sessionPin = null;
+    clearTimeout(idleTimer);
+    $('noteList').innerHTML = ''; $('noteInput').value = '';
+    $('oldPin').value = ''; $('newPin').value = '';
+    show('sLocked');
+    if (!silent) toast('ล็อกแล้ว');
+}
+
+/* ---------- ล็อกอัตโนมัติเมื่อไม่ใช้งาน ---------- */
+function resetIdle() {
+    clearTimeout(idleTimer);
+    if (!sessionPin) return;
+    idleTimer = setTimeout(() => { lockNow(true); toast('ล็อกอัตโนมัติ (ไม่ได้ใช้งาน)'); }, CONFIG.IDLE_LOCK_SECONDS * 1000);
+}
+['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(e => document.addEventListener(e, resetIdle, { passive: true }));
+
+/* ---------- แสดง / บันทึก / ลบ ---------- */
+function renderNotes(notes) {
+    const list = $('noteList');
+    list.innerHTML = '';
+    $('noteEmpty').classList.toggle('hidden', notes.length > 0);
+    $('noteCount').textContent = notes.length ? '(' + notes.length + ')' : '';
+    notes.forEach(n => {
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-2xl border border-pink-100 p-3 shadow-sm';
+        const text = document.createElement('div');
+        text.className = 'note-text text-sm text-gray-700';
+        text.textContent = n.content;
+        const foot = document.createElement('div');
+        foot.className = 'flex items-center justify-between mt-2 pt-2 border-t border-pink-50';
+        const time = document.createElement('span');
+        time.className = 'text-[11px] text-gray-400';
+        time.textContent = new Date(n.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+        const del = document.createElement('button');
+        del.className = 'text-[11px] text-red-400 hover:text-red-600 font-semibold';
+        del.innerHTML = '<i class="fa-solid fa-trash me-1"></i>ลบ';
+        del.onclick = () => doDelete(n.id);
+        foot.append(time, del);
+        card.append(text, foot);
+        list.appendChild(card);
+    });
+}
+
+async function reload() {
+    const { data } = await db.rpc('pn_unlock', { p_pin: sessionPin });
+    if (data && data.ok) renderNotes(data.notes || []);
+}
+
+async function doSave() {
+    if (busy || !sessionPin) return;
+    const content = $('noteInput').value;
+    if (!content.trim()) { $('saveMsg').className = 'text-sm text-red-500'; $('saveMsg').textContent = 'กรุณาพิมพ์ข้อมูลก่อนบันทึก'; return; }
+    busy = true;
+    const { data, error } = await db.rpc('pn_add', { p_pin: sessionPin, p_content: content });
+    busy = false;
+    if (error || !data || !data.ok) {
+        $('saveMsg').className = 'text-sm text-red-500';
+        $('saveMsg').textContent = 'บันทึกไม่สำเร็จ';
+        if (data && !data.ok && (data.locked || data.tries_left !== undefined)) { handleFail(data, $('unlockMsg')); }
+        return;
+    }
+    $('noteInput').value = ''; $('saveMsg').textContent = '';
+    toast('บันทึกถาวรเรียบร้อย');
+    await reload();
+}
+
+async function doDelete(id) {
+    if (busy || !sessionPin) return;
+    if (!confirm('ลบบันทึกนี้ถาวรใช่ไหม?')) return;
+    busy = true;
+    const { data } = await db.rpc('pn_delete', { p_pin: sessionPin, p_id: id });
+    busy = false;
+    if (data && data.ok) { toast('ลบแล้ว'); await reload(); } else toast('ลบไม่สำเร็จ');
+}
+
+async function doChange() {
+    if (busy) return;
+    const o = $('oldPin').value, n = $('newPin').value, el = $('chgMsg');
+    el.className = 'text-sm text-red-500';
+    if (!/^[0-9]{4,8}$/.test(n)) { el.textContent = 'รหัสใหม่ต้องเป็นตัวเลข 4-8 หลัก'; return; }
+    busy = true;
+    const { data } = await db.rpc('pn_change_pin', { p_old: o, p_new: n });
+    busy = false;
+    if (data && data.ok) {
+        sessionPin = n; $('oldPin').value = ''; $('newPin').value = '';
+        el.className = 'text-sm text-green-600'; el.textContent = 'เปลี่ยนรหัสเรียบร้อย';
+    } else if (data && data.locked) {
+        handleFail(data, el);
+    } else if (data && data.tries_left !== undefined) {
+        el.textContent = 'รหัสเดิมไม่ถูกต้อง เหลืออีก ' + data.tries_left + ' ครั้ง';
+    } else el.textContent = 'เปลี่ยนรหัสไม่สำเร็จ';
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

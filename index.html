@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกส่วนตัว - ล็อกด้วยรหัสลับ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Kanit', sans-serif; background: linear-gradient(135deg, #fff5f9 0%, #eef8ff 50%, #f6efff 100%); min-height: 100vh; }
+        .glass { background: rgba(255,255,255,.75); backdrop-filter: blur(14px); border: 2px solid rgba(255,255,255,.9); }
+        .btn { transition: all .25s cubic-bezier(.175,.885,.32,1.275); }
+        .btn:hover:not(:disabled) { transform: scale(1.05); }
+        .btn:active:not(:disabled) { transform: scale(.96); }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .grad { background: linear-gradient(90deg, #FF65A3, #8A5CF5); }
+        body *:not(input):not(textarea) { -webkit-user-select: none; user-select: none; }
+        .sel { -webkit-user-select: text !important; user-select: text !important; }
+        .pw-val { -webkit-touch-callout: none; letter-spacing: .08em; word-break: break-all; }
+        @media print { body { display: none !important; } }
+        .note-text { -webkit-user-select: text !important; user-select: text !important; white-space: pre-wrap; word-break: break-word; }
+    </style>
+</head>
+<body class="text-gray-700 pb-12">
+
+<header class="px-4 pt-5 max-w-2xl mx-auto">
+    <div class="glass rounded-full px-5 py-3 flex items-center justify-between shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full grad flex items-center justify-center text-white"><i class="fa-solid fa-lock"></i></div>
+            <div>
+                <div class="font-bold text-gray-800 leading-tight">บันทึกส่วนตัว</div>
+                <div id="whoami" class="text-[11px] text-pink-400 leading-tight">กำลังเชื่อมต่อ...</div>
+            </div>
+        </div>
+        <button id="lockBtn" onclick="lockNow()" class="btn hidden grad text-white text-xs font-bold px-4 py-2 rounded-full">
+            <i class="fa-solid fa-lock me-1"></i>ล็อก
+        </button>
+    </div>
+</header>
+
+<main class="px-4 max-w-2xl mx-auto mt-6 space-y-5">
+
+    <!-- โหลด -->
+    <section id="sLoading" class="glass rounded-3xl p-10 text-center shadow-lg">
+        <i class="fa-solid fa-spinner fa-spin text-3xl text-pink-400"></i>
+    </section>
+
+    <!-- ตั้งรหัสผ่านครั้งแรก -->
+    <section id="sSetup" class="hidden glass rounded-3xl p-6 shadow-lg space-y-3">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🔐</div>
+            <h2 class="text-xl font-bold text-gray-800">ตั้งรหัสผ่านสมุดบันทึก</h2>
+            <p class="text-xs text-gray-500 mt-1">ใช้เข้ารหัสและเปิดบันทึกทุกครั้ง แอดมินมองไม่เห็นรหัสนี้</p>
+        </div>
+        <div id="setupBlock" class="space-y-2"></div>
+        <button id="setupBtn" onclick="doSetup()" disabled class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">ตั้งรหัสผ่าน</button>
+    </section>
+
+    <!-- อัปเกรดผู้ใช้เดิม -->
+    <section id="sMigrate" class="hidden glass rounded-3xl p-6 shadow-lg space-y-3">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🛡️</div>
+            <h2 class="text-xl font-bold text-gray-800">อัปเกรดความปลอดภัย</h2>
+            <p class="text-xs text-gray-500 mt-1">บันทึกเดิมของคุณจะถูกเข้ารหัสทั้งหมด ตั้งรหัสผ่านใหม่ (แทนรหัสตัวเลขเดิม) เพื่อดำเนินการต่อ</p>
+        </div>
+        <div id="migBlock" class="space-y-2"></div>
+        <button id="migBtn" onclick="doMigrate()" disabled class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">เข้ารหัสบันทึกเดิม</button>
+        <button onclick="lockNow(true)" class="w-full text-xs text-gray-400 py-1">ยกเลิก</button>
+    </section>
+
+    <!-- แสดงรหัสกู้คืน (ครั้งเดียว) -->
+    <section id="sRecoveryKey" class="hidden glass rounded-3xl p-6 shadow-lg space-y-3">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🗝️</div>
+            <h2 class="text-xl font-bold text-gray-800">รหัสกู้คืนของคุณ</h2>
+            <p class="text-xs text-gray-500 mt-1">แสดงครั้งเดียวเท่านั้น ใช้เปิดข้อมูลเมื่อลืมรหัสผ่าน แอดมินช่วยกู้ให้ไม่ได้</p>
+        </div>
+        <div id="recCode" class="sel text-center font-mono font-bold text-lg tracking-wider bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 break-all"></div>
+        <div class="grid grid-cols-2 gap-2">
+            <button onclick="downloadRecovery()" class="btn bg-sky-500 text-white font-bold py-2.5 rounded-full text-sm"><i class="fa-solid fa-download me-1"></i>ดาวน์โหลดเป็นไฟล์</button>
+            <button onclick="copyRecovery()" class="btn bg-gray-700 text-white font-bold py-2.5 rounded-full text-sm"><i class="fa-regular fa-copy me-1"></i>คัดลอก</button>
+        </div>
+        <ul class="text-xs text-red-500 space-y-1 list-disc pl-5">
+            <li>เก็บไฟล์ไว้ในที่ปลอดภัย และควรมีสำเนาอีกที่ (เช่น ส่งเข้าอีเมลตัวเอง) เพราะถ้าเครื่องพังจะเปิดข้อมูลไม่ได้</li>
+            <li>ถ้าลืมรหัสผ่านและทำรหัสนี้หาย ข้อมูลจะกู้คืนไม่ได้อีกเลย</li>
+            <li>อย่าให้ใครเห็นรหัสนี้ เพราะคนที่มีรหัสนี้เปิดบันทึกของคุณได้</li>
+        </ul>
+        <input id="recConfirm" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="updateRecBtn()"
+            placeholder="พิมพ์ 4 ตัวท้ายของรหัสเพื่อยืนยัน"
+            class="w-full text-center tracking-widest py-2.5 rounded-full border-2 border-amber-200 bg-white focus:outline-none">
+        <label class="flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+            <input id="recAck" type="checkbox" onchange="updateRecBtn()" class="w-4 h-4 mt-0.5 accent-pink-500">
+            <span>ฉันเก็บรหัสกู้คืนไว้แล้ว และเข้าใจว่าถ้าลืมรหัสผ่านพร้อมทำรหัสนี้หาย ข้อมูลจะกู้คืนไม่ได้</span>
+        </label>
+        <p id="recMsg" class="text-center text-sm text-red-500 min-h-[1.25rem]"></p>
+        <button id="recBtn" onclick="commitPending()" disabled class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">ยืนยันและเริ่มใช้งาน</button>
+        <button onclick="cancelPending()" class="w-full text-xs text-gray-400 py-1">ยกเลิก</button>
+    </section>
+
+    <!-- หน้าใส่รหัสเปิด -->
+    <section id="sLocked" class="hidden glass rounded-3xl p-6 shadow-lg space-y-4">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🔒</div>
+            <h2 class="text-xl font-bold text-gray-800">ใส่รหัสผ่านเพื่อเปิดบันทึก</h2>
+            <p id="unlockHint" class="hidden text-xs text-amber-600 mt-1">ระบบอัปเกรดแล้ว ใส่ <b>รหัสตัวเลขเดิม</b> ครั้งนี้ จากนั้นจะให้ตั้งรหัสผ่านใหม่</p>
+        </div>
+        <div class="relative">
+            <input id="unlockPin" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100"
+                placeholder="รหัสผ่าน"
+                onkeydown="if(event.key==='Enter')doUnlock()"
+                class="w-full text-center text-lg py-3 pr-12 rounded-full border-2 border-pink-200 focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white">
+            <button type="button" onclick="toggleInputEye('unlockPin', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"><i class="fa-solid fa-eye-slash"></i></button>
+        </div>
+        <p id="unlockMsg" class="text-center text-sm text-red-500 min-h-[1.25rem]"></p>
+        <div id="lockInfo" class="hidden text-center bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl p-3 text-sm">
+            ถูกล็อกชั่วคราว รอ <span id="lockCountdown" class="font-extrabold">--:--</span>
+        </div>
+        <button id="unlockBtn" onclick="doUnlock()" class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">
+            <i class="fa-solid fa-lock-open me-1"></i>เปิดดูบันทึก
+        </button>
+        <button onclick="showForgot()" class="w-full text-sm text-sky-500 font-semibold py-1">ลืมรหัสผ่าน?</button>
+        <p class="text-[11px] text-gray-400 text-center">ผิดครบ 5 ครั้งจะถูกล็อก 30 นาที → 1 ชั่วโมง → 2 ชั่วโมง ใส่ถูกเมื่อไหร่ก็เริ่มนับใหม่</p>
+    </section>
+
+    <!-- ลืมรหัสผ่าน -->
+    <section id="sForgot" class="hidden glass rounded-3xl p-6 shadow-lg space-y-4">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🆘</div>
+            <h2 class="text-xl font-bold text-gray-800">ลืมรหัสผ่าน</h2>
+        </div>
+        <div id="fgRecWrap" class="space-y-3">
+            <p class="text-sm text-gray-600">มีรหัสกู้คืน? ใส่รหัสเพื่อเปิดข้อมูลเดิม แล้วตั้งรหัสผ่านใหม่ <b>บันทึกเดิมอยู่ครบ</b></p>
+            <input id="fgCode" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="30"
+                oninput="updatePwBlock('fg')" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                class="w-full text-center font-mono tracking-wider py-3 rounded-full border-2 border-amber-200 bg-white focus:outline-none">
+            <div id="fgBlock" class="space-y-2"></div>
+            <button id="fgBtn" onclick="doRecover()" disabled class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">กู้คืนและตั้งรหัสผ่านใหม่</button>
+        </div>
+        <details class="border-t border-gray-200 pt-3">
+            <summary class="cursor-pointer text-sm font-semibold text-red-500">ไม่มีรหัสกู้คืน? สร้างสมุดบันทึกใหม่</summary>
+            <div class="space-y-3 mt-3">
+                <p class="text-xs text-red-500">ข้อมูลในสมุดเดิมจะถูก<b>ลบถาวร</b>และกู้คืนไม่ได้ เพราะไม่มีกุญแจเปิด (แอดมินก็เปิดให้ไม่ได้)</p>
+                <input id="rsConfirm" type="text" autocomplete="off" placeholder="พิมพ์คำว่า ลบทั้งหมด"
+                    class="w-full text-center py-2.5 rounded-full border-2 border-red-200 bg-white focus:outline-none">
+                <p id="rsMsg" class="text-center text-sm text-red-500 min-h-[1.25rem]"></p>
+                <button onclick="doReset()" class="btn w-full bg-red-500 text-white font-bold py-2.5 rounded-full">ลบทั้งหมดและสร้างสมุดใหม่</button>
+            </div>
+        </details>
+        <button onclick="showLocked()" class="w-full text-xs text-gray-400 py-1">กลับ</button>
+    </section>
+
+    <!-- หน้าบันทึก (ปลดล็อกแล้ว) -->
+    <section id="sOpen" class="hidden space-y-5">
+        <div class="glass rounded-3xl p-5 shadow-lg space-y-3">
+            <h3 class="font-bold text-gray-800"><i class="fa-solid fa-pen text-pink-400 me-2"></i>เขียนบันทึกใหม่</h3>
+            <textarea id="noteInput" rows="3" maxlength="3000" placeholder="ข้อความ เช่น อีเมล หรืออื่นๆ..."
+                class="w-full rounded-2xl border-2 border-pink-200 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white"></textarea>
+            <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input id="hasPw" type="checkbox" onchange="togglePwField()" class="w-4 h-4 accent-pink-500">
+                <span>มีรหัสผ่านพ่วง</span>
+            </label>
+            <div id="pwWrap" class="hidden relative">
+                <input id="pwInput" type="password" maxlength="200" autocomplete="off" placeholder="รหัสผ่าน (บรรทัดที่ 2)"
+                    class="w-full rounded-2xl border-2 border-pink-200 py-2.5 pl-3 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white">
+                <button type="button" onclick="toggleInputEye('pwInput', this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <i class="fa-solid fa-eye-slash"></i>
+                </button>
+            </div>
+            <p id="saveMsg" class="text-sm min-h-[1.25rem]"></p>
+            <button id="saveBtn" onclick="doSave()" class="btn w-full grad text-white font-bold py-3 rounded-full shadow-lg">
+                <i class="fa-solid fa-floppy-disk me-1"></i>บันทึกถาวร
+            </button>
+        </div>
+
+        <div class="glass rounded-3xl p-5 shadow-lg">
+            <h3 class="font-bold text-gray-800 mb-3"><i class="fa-solid fa-book text-purple-400 me-2"></i>บันทึกของฉัน <span id="noteCount" class="text-xs text-gray-400"></span></h3>
+            <div id="noteList" class="space-y-3"></div>
+            <p id="noteEmpty" class="hidden text-center text-sm text-gray-400 py-6">ยังไม่มีบันทึก</p>
+        </div>
+
+        <details class="glass rounded-3xl p-5 shadow-lg">
+            <summary class="cursor-pointer font-bold text-gray-700 text-sm"><i class="fa-solid fa-key text-sky-400 me-2"></i>เปลี่ยนรหัสผ่าน</summary>
+            <div class="space-y-3 mt-4">
+                <div class="relative">
+                    <input id="oldPin" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" maxlength="100" placeholder="รหัสผ่านเดิม"
+                        oninput="updatePwBlock('chg')"
+                        class="w-full py-3 pl-4 pr-12 rounded-full border-2 border-sky-200 bg-white focus:outline-none">
+                    <button type="button" onclick="toggleInputEye('oldPin', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"><i class="fa-solid fa-eye-slash"></i></button>
+                </div>
+                <div id="chgBlock" class="space-y-2"></div>
+                <button id="chgBtn" onclick="doChange()" disabled class="btn w-full bg-sky-400 text-white font-bold py-2.5 rounded-full">เปลี่ยนรหัสผ่าน</button>
+            </div>
+        </details>
+
+        <details class="glass rounded-3xl p-5 shadow-lg">
+            <summary class="cursor-pointer font-bold text-gray-700 text-sm"><i class="fa-solid fa-life-ring text-amber-400 me-2"></i>รหัสกู้คืน</summary>
+            <div class="space-y-3 mt-4">
+                <p class="text-xs text-gray-500">ทำไฟล์รหัสกู้คืนหาย แต่ยังจำรหัสผ่านได้? ออกรหัสใหม่ได้ที่นี่ (รหัสกู้คืนเก่าจะใช้ไม่ได้อีก)</p>
+                <p id="rotMsg" class="text-sm text-red-500 min-h-[1.25rem]"></p>
+                <button id="rotBtn" onclick="doRotate()" class="btn w-full bg-amber-400 text-white font-bold py-2.5 rounded-full">สร้างรหัสกู้คืนใหม่</button>
+            </div>
+        </details>
+
+        <p class="text-[11px] text-gray-400 text-center">ล็อกอัตโนมัติเมื่อไม่ได้ใช้งาน 2 นาที</p>
+    </section>
+
+    <!-- ยังไม่ได้ล็อกอิน -->
+    <section id="sNoLogin" class="hidden glass rounded-3xl p-8 text-center shadow-lg space-y-4">
+        <div class="text-4xl">🙈</div>
+        <h2 class="text-lg font-bold text-gray-800">กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อน</h2>
+        <button onclick="goToMainSite()" class="btn grad text-white font-bold px-8 py-3 rounded-full shadow-lg">ไปหน้าหลัก</button>
+    </section>
+</main>
+
+<!-- ป๊อปอัพยินยอม -->
+<div id="consentModal" class="hidden fixed inset-0 z-[90] bg-black/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div class="px-5 pt-5 pb-2 text-center">
+            <div class="text-3xl">📜</div>
+            <h2 class="text-lg font-bold text-gray-800">เงื่อนไขการใช้สมุดบันทึก</h2>
+        </div>
+        <div id="consentBody" class="px-5 py-2 overflow-y-auto flex-1"></div>
+        <div class="px-5 pb-5 pt-3 border-t border-gray-100 space-y-3">
+            <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input id="consentCheck" type="checkbox" onchange="$('consentBtn').disabled = !this.checked" class="w-5 h-5 mt-0.5 accent-pink-500">
+                <span>ฉันอ่านและยอมรับเงื่อนไขข้างต้นทั้งหมด</span>
+            </label>
+            <p id="consentMsg" class="text-sm text-red-500 min-h-[1.25rem]"></p>
+            <div class="flex gap-2">
+                <button onclick="goToMainSite()" class="btn px-5 bg-gray-200 text-gray-600 font-bold py-3 rounded-full text-sm">ยกเลิก</button>
+                <button id="consentBtn" onclick="doConsent()" disabled class="btn flex-1 grad text-white font-bold py-3 rounded-full text-sm">ยอมรับและดำเนินการต่อ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="shield" class="hidden fixed inset-0 z-[100] bg-gray-900 text-white flex flex-col items-center justify-center text-center p-6">
+    <div class="text-5xl mb-3">🙈</div>
+    <div class="font-bold">ซ่อนหน้าจอเพื่อความปลอดภัย</div>
+    <div class="text-xs mt-1 opacity-70">กลับมาที่หน้านี้เพื่อดูบันทึกต่อ</div>
+</div>
+
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[110] bg-white/95 border-2 border-pink-200 px-5 py-3 rounded-full shadow-2xl text-sm font-semibold opacity-0 translate-y-20 transition-all duration-300 pointer-events-none"></div>
+
+<script>
+const CONFIG = {
+    SUPABASE_URL: 'https://ztkqtvdllpzjsvlqxzni.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_BkDeJmZYwMys8OP4eMkpVQ_F6hrJ35t',
+    MAIN_SITE_URL: 'https://suphasan887-beep.github.io/index.html/',
+    IDLE_LOCK_SECONDS: 120
+};
+const TOKEN_KEY = 'main_access_token';
+const KDF_ITER = 600000;   // รหัสผ่านสมุดบันทึก
+const REC_ITER = 200000;   // รหัสกู้คืน (สุ่มยาว จึงใช้รอบน้อยกว่าได้)
+
+const $ = id => document.getElementById(id);
+let authClient = null;   // ใช้ตรวจโทเค็น
+let db = null;           // client ที่แนบโทเค็นผู้ใช้
+let currentUser = null;
+let sessionPin = null;   // ค่าตรวจสิทธิ์ที่คำนวณจากรหัสผ่าน (ไม่ใช่ตัวรหัสผ่าน) อยู่ในหน่วยความจำเท่านั้น
+let sessionDEK = null;   // กุญแจเข้ารหัสข้อมูล อยู่ในหน่วยความจำเท่านั้น ล็อก/ปิดแท็บ = หาย
+let status = null, legacy = null, pending = null, consentVersion = null;
+let lockUntilMs = 0, lockTimer = null, idleTimer = null, busy = false;
+const tick = () => new Promise(r => setTimeout(r, 40));
+
+/* ===== CRYPTO START ===== */
+const enc = new TextEncoder(), dec = new TextDecoder();
+function b64(buf) {
+    const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+}
+function unb64(s) { const bin = atob(s); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; }
+function hex(buf) { return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''); }
+function rand(n) { return crypto.getRandomValues(new Uint8Array(n)); }
+
+// รหัสผ่าน/รหัสกู้คืน -> PBKDF2 -> HKDF แยกเป็น 2 ค่า: ค่าตรวจสิทธิ์ (ส่งไปเซิร์ฟเวอร์) และกุญแจล็อก (ไม่ออกจากเครื่อง)
+async function deriveKeys(secret, saltB64, iterations) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(String(secret).normalize('NFKC')), 'PBKDF2', false, ['deriveBits']);
+    const master = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64(saltB64), iterations }, base, 256);
+    const hk = await crypto.subtle.importKey('raw', master, 'HKDF', false, ['deriveBits', 'deriveKey']);
+    const empty = new Uint8Array(0);
+    const authBits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: empty, info: enc.encode('pn-auth-v2') }, hk, 256);
+    const wrapKey = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: empty, info: enc.encode('pn-wrap-v2') },
+        hk, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    return { auth: hex(authBits), wrapKey };
+}
+async function seal(key, u8, aad) {
+    const iv = rand(12);
+    const p = { name: 'AES-GCM', iv };
+    if (aad) p.additionalData = enc.encode(aad);
+    const ct = new Uint8Array(await crypto.subtle.encrypt(p, key, u8));
+    const out = new Uint8Array(12 + ct.length);
+    out.set(iv); out.set(ct, 12);
+    return b64(out);
+}
+async function unseal(key, s, aad) {
+    const all = unb64(s);
+    const p = { name: 'AES-GCM', iv: all.subarray(0, 12) };
+    if (aad) p.additionalData = enc.encode(aad);
+    return new Uint8Array(await crypto.subtle.decrypt(p, key, all.subarray(12)));
+}
+async function unwrapDEK(wrapKey, wrapB64) {
+    const raw = await unseal(wrapKey, wrapB64);
+    return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+}
+
+// รหัสกู้คืน 20 ตัว (~99 บิต) ตัดตัวที่สับสนง่าย (0 O 1 I L) ออก
+const REC_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function genRecoveryCode() {
+    let out = '';
+    while (out.length < 20) {
+        for (const x of rand(32)) { if (x < 248 && out.length < 20) out += REC_ALPHA[x % 31]; }
+    }
+    return out;
+}
+function normRec(s) { return String(s).toUpperCase().split('').filter(c => REC_ALPHA.includes(c)).join(''); }
+function fmtRec(c) { return c.match(/.{1,4}/g).join('-'); }
+
+/* ----- วัดความแข็งแรงของรหัสผ่าน ----- */
+const COMMON = ['password', 'passw0rd', 'qwerty', 'asdfgh', 'zxcvbn', 'letmein', 'welcome', 'admin', 'iloveyou', 'monkey',
+    'dragon', 'login', 'abc123', '123456', '111111', '1q2w3e', 'secret', 'master', 'football', 'sunshine', 'princess', 'bangkok', 'thailand'];
+function evalPw(p, uname) {
+    const ascii = /^[\x21-\x7E]*$/.test(p);
+    const has = { lower: /[a-z]/.test(p), upper: /[A-Z]/.test(p), digit: /[0-9]/.test(p), sym: /[^A-Za-z0-9]/.test(p) };
+    const classes = Object.values(has).filter(Boolean).length;
+    const pool = (has.lower ? 26 : 0) + (has.upper ? 26 : 0) + (has.digit ? 10 : 0) + (has.sym ? 33 : 0);
+    let eff = 0, prev = null;
+    for (const ch of p) {                       // ตัวซ้ำ/เรียงต่อกัน (aaaa, 1234, abcd) นับน้อยลง
+        const c = ch.charCodeAt(0);
+        if (prev === null) eff += 1;
+        else { const d = c - prev; eff += d === 0 ? 0 : (Math.abs(d) === 1 ? 0.3 : 1); }
+        prev = c;
+    }
+    let bits = pool ? eff * Math.log2(pool) : 0;
+    const low = p.toLowerCase();
+    let common = COMMON.some(w => low.includes(w));
+    if (uname && String(uname).length >= 3 && low.includes(String(uname).toLowerCase())) common = true;
+    if (common) bits = Math.max(0, bits - 30);
+    const lenOk = p.length >= 8;
+    let level = 'red';
+    if (ascii && lenOk && !common) {
+        if (bits >= 62 && (classes >= 3 || p.length >= 16)) level = 'green';
+        else if (bits >= 42) level = 'yellow';
+    }
+    return { ascii, has, classes, bits, lenOk, common, level };
+}
+/* ===== CRYPTO END ===== */
+
+/* ---------- ช่องตั้งรหัสผ่าน + หลอดวัดความปลอดภัย (ใช้ซ้ำหลายหน้า) ---------- */
+const PWB_EXTRA = {
+    fg: () => normRec($('fgCode').value).length === 20,
+    chg: () => $('oldPin').value.length > 0
+};
+function pwBlockHTML(p) {
+    const inp = 'w-full rounded-full border-2 border-pink-200 py-3 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-pink-300 bg-white';
+    return '<div class="relative">' +
+        '<input id="' + p + 'Pw" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="ตั้งรหัสผ่านใหม่" class="' + inp + '">' +
+        '<button type="button" onclick="toggleInputEye(\'' + p + 'Pw\', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"><i class="fa-solid fa-eye-slash"></i></button></div>' +
+        '<div class="h-3 rounded-full bg-gray-200 overflow-hidden"><div id="' + p + 'Bar" class="h-full rounded-full transition-all duration-300" style="width:0%"></div></div>' +
+        '<div id="' + p + 'Lbl" class="text-xs font-semibold text-gray-500">พิมพ์รหัสผ่านเพื่อวัดความปลอดภัย</div>' +
+        '<ul id="' + p + 'Chk" class="text-xs grid grid-cols-2 gap-x-2 gap-y-1"></ul>' +
+        '<input id="' + p + 'Pw2" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="ยืนยันรหัสผ่านอีกครั้ง" class="' + inp.replace('pr-12', 'pr-4') + '">' +
+        '<p id="' + p + 'Msg" class="text-sm text-red-500 min-h-[1.25rem]"></p>';
+}
+function initPwBlocks() {
+    ['setup', 'mig', 'fg', 'chg'].forEach(p => {
+        $(p + 'Block').innerHTML = pwBlockHTML(p);
+        $(p + 'Pw').addEventListener('input', () => { $(p + 'Msg').textContent = ''; updatePwBlock(p); });
+        $(p + 'Pw2').addEventListener('input', () => { $(p + 'Msg').textContent = ''; updatePwBlock(p); });
+        updatePwBlock(p);
+    });
+}
+function updatePwBlock(p) {
+    const a = $(p + 'Pw'), b = $(p + 'Pw2');
+    if (!a || !b) return false;
+    const v = a.value, v2 = b.value;
+    const e = evalPw(v, currentUser && currentUser.username);
+    const COLORS = { red: '#ef4444', yellow: '#f59e0b', green: '#22c55e' };
+    const bar = $(p + 'Bar'), lbl = $(p + 'Lbl');
+    if (!v) {
+        bar.style.width = '0%';
+        lbl.textContent = 'พิมพ์รหัสผ่านเพื่อวัดความปลอดภัย'; lbl.style.color = '#6b7280';
+    } else {
+        bar.style.width = e.level === 'green' ? '100%' : e.level === 'yellow' ? '66%' : '33%';
+        bar.style.background = COLORS[e.level];
+        lbl.style.color = COLORS[e.level];
+        if (!e.ascii) lbl.textContent = 'ใช้ได้เฉพาะภาษาอังกฤษ ตัวเลข และอักขระพิเศษ (ห้ามภาษาไทยและช่องว่าง)';
+        else if (!e.lenOk) lbl.textContent = 'ยังไม่ปลอดภัย: สั้นเกินไป (อย่างน้อย 8 ตัว)';
+        else if (e.common) lbl.textContent = 'ยังไม่ปลอดภัย: มีคำที่เดาง่าย หรือชื่อบัญชีของคุณ';
+        else if (e.level === 'red') lbl.textContent = 'ยังไม่ปลอดภัย: ลองทำให้ยาวขึ้นและผสมหลายแบบ';
+        else if (e.level === 'yellow') lbl.textContent = 'พอใช้ แต่ยังไม่พอ: ทำให้ยาวขึ้น หรือผสมพิมพ์ใหญ่ ตัวเลข อักขระพิเศษ';
+        else lbl.textContent = 'ปลอดภัย ✓';
+    }
+    const items = [[e.lenOk, 'ยาวอย่างน้อย 8 ตัว'], [e.has.lower, 'ตัวพิมพ์เล็ก'], [e.has.upper, 'ตัวพิมพ์ใหญ่'],
+        [e.has.digit, 'ตัวเลข'], [e.has.sym, 'อักขระพิเศษ (ช่วยให้แข็งแรงขึ้น)']];
+    $(p + 'Chk').innerHTML = items.map(([ok, t]) =>
+        '<li class="' + (ok ? 'text-green-600' : 'text-gray-400') + '">' + (ok ? '✓ ' : '○ ') + t + '</li>').join('');
+    const match = v2.length > 0 && v === v2;
+    const msg = $(p + 'Msg');
+    if (v2.length > 0 && !match) { msg.className = 'text-sm text-red-500 min-h-[1.25rem]'; msg.textContent = 'รหัสผ่านสองช่องไม่ตรงกัน'; }
+    const ok = e.level === 'green' && match && (!PWB_EXTRA[p] || PWB_EXTRA[p]());
+    const btn = $(p + 'Btn');
+    if (btn && !busy) btn.disabled = !ok;
+    return ok;
+}
+function pwBlockValue(p) {
+    const v = $(p + 'Pw').value;
+    const e = evalPw(v, currentUser && currentUser.username);
+    return { ok: e.level === 'green' && v === $(p + 'Pw2').value, value: v };
+}
+function resetPwBlock(p) {
+    $(p + 'Pw').value = ''; $(p + 'Pw2').value = ''; $(p + 'Pw').type = 'password';
+    updatePwBlock(p);
+}
+
+const SCREENS = ['sLoading', 'sSetup', 'sMigrate', 'sRecoveryKey', 'sLocked', 'sForgot', 'sOpen', 'sNoLogin'];
+function show(name) {
+    SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== name));
+    $('lockBtn').classList.toggle('hidden', name !== 'sOpen');
+}
+function toast(msg) {
+    const t = $('toast'); t.textContent = msg;
+    t.classList.remove('opacity-0', 'translate-y-20');
+    setTimeout(() => t.classList.add('opacity-0', 'translate-y-20'), 2500);
+}
+function goToMainSite() { location.href = CONFIG.MAIN_SITE_URL; }
+function lsKey() { return 'pn_lock_until_' + (currentUser ? currentUser.id : ''); }
+
+async function getToken() {
+    try {
+        const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+        const fromHash = h.get('at');
+        if (fromHash) {
+            sessionStorage.setItem(TOKEN_KEY, fromHash);
+            history.replaceState(null, '', location.pathname + location.search);
+            return fromHash;
+        }
+        const saved = sessionStorage.getItem(TOKEN_KEY);
+        if (saved) return saved;
+        const { data } = await authClient.auth.getSession();
+        return data && data.session ? data.session.access_token : null;
+    } catch (e) { return null; }
+}
+
+async function init() {
+    initPwBlocks();
+    authClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    const token = await getToken();
+    if (!token) { show('sNoLogin'); $('whoami').textContent = 'ยังไม่ได้เข้าสู่ระบบ'; return; }
+    const { data: { user }, error } = await authClient.auth.getUser(token);
+    if (error || !user) {
+        try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        show('sNoLogin'); $('whoami').textContent = 'ยังไม่ได้เข้าสู่ระบบ'; return;
+    }
+    db = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: 'Bearer ' + token } },
+        auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { data: p } = await db.from('profiles').select('username').eq('id', user.id).maybeSingle();
+    currentUser = { id: user.id, username: (p && p.username) || (user.user_metadata && user.user_metadata.username) || (user.email ? user.email.split('@')[0] : 'ผู้ใช้') };
+    $('whoami').textContent = 'บัญชี: ' + currentUser.username;
+    await refreshStatus();
+}
+
+async function refreshStatus() {
+    const { data, error } = await db.rpc('pn_status');
+    if (error || !data || data.auth === false) {
+        toast('เชื่อมต่อไม่สำเร็จ (ยังไม่ได้รัน SQL หรือโทเค็นหมดอายุ?)');
+        show('sNoLogin'); return;
+    }
+    status = data;
+    if (!data.consent_ok) { show('sLoading'); await showConsent(); return; }
+    if (!data.has_pin) { resetPwBlock('setup'); show('sSetup'); return; }
+    showLocked();
+}
+
+/* ---------- ป๊อปอัพยินยอม ---------- */
+function renderConsent(body) {
+    const box = $('consentBody'); box.innerHTML = '';
+    let ul = null;
+    body.split('\n').forEach(raw => {
+        const line = raw.trim();
+        if (!line) { ul = null; return; }
+        if (line.startsWith('## ')) {
+            ul = null;
+            const h = document.createElement('h4'); h.className = 'font-bold text-gray-800 mt-3'; h.textContent = line.slice(3); box.appendChild(h);
+        } else if (line.startsWith('- ')) {
+            if (!ul) { ul = document.createElement('ul'); ul.className = 'list-disc pl-5 space-y-1 text-sm text-gray-600 mt-1'; box.appendChild(ul); }
+            const li = document.createElement('li'); li.textContent = line.slice(2); ul.appendChild(li);
+        } else {
+            ul = null;
+            const p = document.createElement('p'); p.className = 'text-sm text-gray-600 mt-1'; p.textContent = line; box.appendChild(p);
+        }
+    });
+}
+async function showConsent() {
+    const { data, error } = await db.rpc('pn_consent_get');
+    if (error || !data || data.none || !data.body) { toast('โหลดเงื่อนไขไม่สำเร็จ (ยังไม่ได้รัน SQL ชุดใหม่?)'); return; }
+    consentVersion = data.version;
+    renderConsent(data.body);
+    $('consentCheck').checked = false; $('consentBtn').disabled = true; $('consentMsg').textContent = '';
+    $('consentModal').classList.remove('hidden');
+}
+async function doConsent() {
+    if (busy || !$('consentCheck').checked) return;
+    busy = true; $('consentBtn').disabled = true;
+    const { data, error } = await db.rpc('pn_accept_consent', { p_version: consentVersion });
+    busy = false;
+    if (error || !data || !data.ok) {
+        $('consentMsg').textContent = data && data.stale ? 'เงื่อนไขมีการอัปเดต กรุณารีเฟรชหน้า' : 'บันทึกการยอมรับไม่สำเร็จ ลองอีกครั้ง';
+        $('consentBtn').disabled = false; return;
+    }
+    $('consentModal').classList.add('hidden');
+    await refreshStatus();
+}
+
+/* ---------- เตรียมกุญแจ (สร้างสมุดใหม่ / อัปเกรด / ออกรหัสกู้คืนใหม่) ---------- */
+async function prepareRecovery(raw) {
+    const code = genRecoveryCode();
+    const rec_salt = b64(rand(16));
+    const rk = await deriveKeys(code, rec_salt, REC_ITER);
+    return { code, rec_salt, rec_auth: rk.auth, wrap_rc: await seal(rk.wrapKey, raw) };
+}
+async function prepareKeys(password) {
+    const salt = b64(rand(16));
+    const keys = await deriveKeys(password, salt, KDF_ITER);
+    const dek = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', dek));
+    const wrap_pw = await seal(keys.wrapKey, raw);
+    const rec = await prepareRecovery(raw);
+    return Object.assign({ auth: keys.auth, salt, wrap_pw, dek }, rec);
+}
+function noteAad() { return 'note:' + currentUser.id; }
+async function sealNoteWith(dek, plain) { return 'v2:' + await seal(dek, enc.encode(plain), noteAad()); }
+function sealNote(plain) { return sealNoteWith(sessionDEK, plain); }
+async function unsealNote(c) {
+    if (typeof c === 'string' && c.startsWith('v2:')) return dec.decode(await unseal(sessionDEK, c.slice(3), noteAad()));
+    return c;
+}
+async function decryptNotes(notes) {
+    const out = [];
+    for (const n of notes) {
+        let content, failed = false;
+        try { content = await unsealNote(n.content); } catch (e) { content = '⚠️ ถอดรหัสบันทึกนี้ไม่สำเร็จ'; failed = true; }
+        out.push({ id: n.id, created_at: n.created_at, content, failed });
+    }
+    return out;
+}
+function openSession(p) {
+    sessionPin = p.auth; sessionDEK = p.dek;
+    status = Object.assign({}, status, { has_pin: true, enc_version: 2, salt: p.salt, rec_salt: p.rec_salt, seconds_left: 0 });
+    pending = null; legacy = null; $('recCode').textContent = '';
+    stopCountdown(); try { localStorage.removeItem(lsKey()); } catch (e) {}
+}
+
+/* ---------- หน้ารหัสกู้คืน ---------- */
+function showRecoveryKey(code, commit, back) {
+    pending = { code, commit, back };
+    $('recCode').textContent = fmtRec(code);
+    $('recConfirm').value = ''; $('recAck').checked = false; $('recMsg').textContent = '';
+    updateRecBtn();
+    show('sRecoveryKey');
+}
+function updateRecBtn() {
+    const ok = !!pending && normRec($('recConfirm').value) === pending.code.slice(-4) && $('recAck').checked;
+    $('recBtn').disabled = !ok;
+}
+function cancelPending() {
+    const b = pending && pending.back;
+    pending = null; $('recCode').textContent = '';
+    if (b) b();
+}
+async function commitPending() {
+    if (busy || !pending) return;
+    busy = true; $('recBtn').disabled = true; $('recMsg').textContent = 'กำลังบันทึก...';
+    let ok = false;
+    try { ok = await pending.commit(); } catch (e) { console.error(e); }
+    busy = false;
+    if (!ok) { $('recMsg').textContent = 'บันทึกไม่สำเร็จ ลองกดอีกครั้ง'; updateRecBtn(); }
+    else $('recMsg').textContent = '';
+}
+function downloadRecovery() {
+    if (!pending) return;
+    const lines = [
+        'รหัสกู้คืนสมุดบันทึก (Recovery Key)',
+        '====================================',
+        'บัญชี: ' + (currentUser ? currentUser.username : ''),
+        'สร้างเมื่อ: ' + new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }),
+        '',
+        'รหัสกู้คืน: ' + fmtRec(pending.code),
+        '',
+        'คำเตือน:',
+        '- ใช้เปิดข้อมูลสมุดบันทึกเมื่อลืมรหัสผ่าน แอดมินช่วยกู้คืนให้ไม่ได้',
+        '- ถ้าลืมรหัสผ่านและทำรหัสนี้หาย ข้อมูลจะกู้คืนไม่ได้อีกเลย',
+        '- อย่าให้ผู้อื่นเห็นไฟล์นี้ และควรเก็บสำเนาไว้อีกที่'
+    ];
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'notebook-recovery-key.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function copyRecovery() {
+    if (!pending) return;
+    try { await navigator.clipboard.writeText(fmtRec(pending.code)); toast('คัดลอกรหัสกู้คืนแล้ว'); } catch (e) { toast('คัดลอกไม่สำเร็จ'); }
+}
+
+/* ---------- ตั้งรหัสผ่านครั้งแรก ---------- */
+async function doSetup() {
+    if (busy) return;
+    const r = pwBlockValue('setup');
+    if (!r.ok) { updatePwBlock('setup'); return; }
+    busy = true; $('setupBtn').disabled = true; $('setupBtn').textContent = 'กำลังเข้ารหัส...';
+    try {
+        await tick();
+        const p = await prepareKeys(r.value);
+        showRecoveryKey(p.code, () => commitSetup(p), () => { show('sSetup'); });
+    } catch (e) { console.error(e); $('setupMsg').textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง'; }
+    busy = false; $('setupBtn').textContent = 'ตั้งรหัสผ่าน'; updatePwBlock('setup');
+}
+async function commitSetup(p) {
+    const { data, error } = await db.rpc('pn_setup', {
+        p_auth: p.auth, p_salt: p.salt, p_wrap_pw: p.wrap_pw,
+        p_rec_salt: p.rec_salt, p_rec_auth: p.rec_auth, p_wrap_rc: p.wrap_rc
+    });
+    if (error || !data || !data.ok) return false;
+    openSession(p);
+    resetPwBlock('setup');
+    renderNotes([]); show('sOpen'); resetIdle();
+    toast('สร้างสมุดบันทึกเรียบร้อย');
+    return true;
+}
+
+/* ---------- อัปเกรดผู้ใช้เดิม ---------- */
+async function doMigrate() {
+    if (busy || !legacy) return;
+    const r = pwBlockValue('mig');
+    if (!r.ok) { updatePwBlock('mig'); return; }
+    busy = true; $('migBtn').disabled = true; $('migBtn').textContent = 'กำลังเข้ารหัส...';
+    try {
+        await tick();
+        const p = await prepareKeys(r.value);
+        const notes = [];
+        for (const n of legacy.notes) notes.push({ id: n.id, content: await sealNoteWith(p.dek, n.content) });
+        showRecoveryKey(p.code, () => commitMigrate(p, notes), () => { show('sMigrate'); });
+    } catch (e) { console.error(e); $('migMsg').textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง'; }
+    busy = false; $('migBtn').textContent = 'เข้ารหัสบันทึกเดิม'; updatePwBlock('mig');
+}
+async function commitMigrate(p, notes) {
+    const { data, error } = await db.rpc('pn_migrate', {
+        p_old_pin: legacy.pin, p_auth: p.auth, p_salt: p.salt, p_wrap_pw: p.wrap_pw,
+        p_rec_salt: p.rec_salt, p_rec_auth: p.rec_auth, p_wrap_rc: p.wrap_rc, p_notes: notes
+    });
+    if (error || !data || !data.ok) return false;
+    openSession(p);
+    resetPwBlock('mig');
+    await reload(); show('sOpen'); resetIdle();
+    toast('อัปเกรดเรียบร้อย บันทึกทั้งหมดถูกเข้ารหัสแล้ว');
+    return true;
+}
+
+/* ---------- ล็อก/นับถอยหลัง ---------- */
+function startCountdown(sec) {
+    lockUntilMs = Date.now() + sec * 1000;
+    try { localStorage.setItem(lsKey(), String(lockUntilMs)); } catch (e) {}
+    $('lockInfo').classList.remove('hidden');
+    $('unlockBtn').disabled = true; $('unlockPin').disabled = true;
+    clearInterval(lockTimer);
+    const tickFn = () => {
+        const left = Math.ceil((lockUntilMs - Date.now()) / 1000);
+        if (left <= 0) { stopCountdown(); $('unlockMsg').textContent = ''; return; }
+        const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), s = left % 60;
+        $('lockCountdown').textContent = (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    };
+    tickFn(); lockTimer = setInterval(tickFn, 1000);
+}
+function stopCountdown() {
+    clearInterval(lockTimer); lockUntilMs = 0;
+    $('lockInfo').classList.add('hidden');
+    $('unlockBtn').disabled = false; $('unlockPin').disabled = false;
+}
+function prepLocked() {
+    const legacyMode = !!status && status.enc_version === 0;
+    $('unlockHint').classList.toggle('hidden', !legacyMode);
+    $('unlockPin').placeholder = legacyMode ? 'รหัสตัวเลขเดิม' : 'รหัสผ่าน';
+    $('unlockPin').value = ''; $('unlockPin').type = 'password';
+}
+function showLocked() {
+    prepLocked(); $('unlockMsg').textContent = ''; show('sLocked');
+    const sec = (status && status.seconds_left) || 0;
+    if (sec > 0) startCountdown(sec);
+    else { stopCountdown(); try { localStorage.removeItem(lsKey()); } catch (e) {} }
+}
+
+/* ---------- เปิดดู ---------- */
+function handleFail(data, msgEl) {
+    if (data && data.locked) {
+        msgEl.textContent = 'ใส่รหัสผิดครบ 5 ครั้ง ถูกล็อกชั่วคราว';
+        startCountdown(data.seconds_left || 1800);
+        lockNow(true);
+    } else if (data && data.tries_left !== undefined) {
+        msgEl.textContent = 'รหัสไม่ถูกต้อง เหลืออีก ' + data.tries_left + ' ครั้ง';
+    } else {
+        msgEl.textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
+    }
+}
+
+async function doUnlock() {
+    if (busy || lockUntilMs > Date.now() || !status) return;
+    const pw = $('unlockPin').value;
+    if (!pw) { $('unlockMsg').textContent = 'กรุณาใส่รหัสผ่าน'; return; }
+    busy = true; $('unlockBtn').disabled = true; $('unlockMsg').textContent = 'กำลังตรวจสอบ...';
+    try {
+        await tick();
+        if (status.enc_version === 0) {                       // ผู้ใช้เดิม: ใส่ PIN ตัวเลขเดิมก่อน แล้วอัปเกรด
+            const { data, error } = await db.rpc('pn_unlock', { p_pin: pw });
+            $('unlockPin').value = '';
+            if (error || !data) { $('unlockMsg').textContent = 'เชื่อมต่อไม่สำเร็จ'; return; }
+            if (!data.ok) { handleFail(data, $('unlockMsg')); return; }
+            legacy = { pin: pw, notes: data.notes || [] };
+            $('unlockMsg').textContent = '';
+            resetPwBlock('mig'); show('sMigrate');
+            return;
+        }
+        const keys = await deriveKeys(pw, status.salt, KDF_ITER);
+        const { data, error } = await db.rpc('pn_unlock', { p_pin: keys.auth });
+        $('unlockPin').value = '';
+        if (error || !data) { $('unlockMsg').textContent = 'เชื่อมต่อไม่สำเร็จ'; return; }
+        if (!data.ok) { handleFail(data, $('unlockMsg')); return; }
+        let dek;
+        try { dek = await unwrapDEK(keys.wrapKey, data.wrap_pw); }
+        catch (e) { $('unlockMsg').textContent = 'ถอดรหัสกุญแจไม่สำเร็จ'; return; }
+        sessionPin = keys.auth; sessionDEK = dek;
+        $('unlockMsg').textContent = '';
+        try { localStorage.removeItem(lsKey()); } catch (e) {}
+        renderNotes(await decryptNotes(data.notes || []));
+        show('sOpen');
+        resetIdle();
+    } finally {
+        busy = false;
+        if (lockUntilMs <= Date.now()) $('unlockBtn').disabled = false;
+    }
+}
+
+function lockNow(silent) {
+    hideAllPw(); hiders = [];
+    sessionPin = null; sessionDEK = null; legacy = null; pending = null;
+    $('recCode').textContent = '';
+    $('shield').classList.add('hidden');
+    clearTimeout(idleTimer);
+    $('noteList').innerHTML = ''; $('noteInput').value = '';
+    $('hasPw').checked = false; togglePwField();
+    $('oldPin').value = ''; resetPwBlock('chg');
+    prepLocked(); show('sLocked');
+    if (!silent) toast('ล็อกแล้ว');
+}
+
+/* ---------- ลืมรหัสผ่าน ---------- */
+function showForgot() {
+    $('fgRecWrap').classList.toggle('hidden', !(status && status.enc_version === 2 && status.rec_salt));
+    $('fgCode').value = ''; resetPwBlock('fg');
+    $('rsConfirm').value = ''; $('rsMsg').textContent = '';
+    show('sForgot');
+}
+async function doRecover() {
+    if (busy) return;
+    const code = normRec($('fgCode').value), r = pwBlockValue('fg'), msg = $('fgMsg');
+    if (code.length !== 20 || !r.ok) { updatePwBlock('fg'); return; }
+    busy = true; $('fgBtn').disabled = true; $('fgBtn').textContent = 'กำลังกู้คืน...';
+    try {
+        await tick();
+        const rk = await deriveKeys(code, status.rec_salt, REC_ITER);
+        const { data, error } = await db.rpc('pn_recover_start', { p_rec_auth: rk.auth });
+        if (error || !data) { msg.textContent = 'เชื่อมต่อไม่สำเร็จ'; return; }
+        if (!data.ok) {
+            if (data.locked) msg.textContent = 'ใส่รหัสกู้คืนผิดหลายครั้ง ถูกล็อกชั่วคราว ลองใหม่ใน ' + Math.ceil((data.seconds_left || 3600) / 60) + ' นาที';
+            else if (data.tries_left !== undefined) msg.textContent = 'รหัสกู้คืนไม่ถูกต้อง เหลืออีก ' + data.tries_left + ' ครั้ง';
+            else msg.textContent = 'บัญชีนี้ไม่มีรหัสกู้คืน';
+            return;
+        }
+        let dek;
+        try { dek = await unwrapDEK(rk.wrapKey, data.wrap_rc); }
+        catch (e) { msg.textContent = 'ถอดรหัสกุญแจไม่สำเร็จ'; return; }
+        const raw = new Uint8Array(await crypto.subtle.exportKey('raw', dek));
+        const salt = b64(rand(16));
+        const nk = await deriveKeys(r.value, salt, KDF_ITER);
+        const wrap_pw = await seal(nk.wrapKey, raw);
+        const f = await db.rpc('pn_recover_finish', { p_rec_auth: rk.auth, p_new_auth: nk.auth, p_new_salt: salt, p_new_wrap_pw: wrap_pw });
+        if (f.error || !f.data || !f.data.ok) { msg.textContent = 'ตั้งรหัสผ่านใหม่ไม่สำเร็จ ลองอีกครั้ง'; return; }
+        sessionPin = nk.auth; sessionDEK = dek;
+        status = Object.assign({}, status, { salt, seconds_left: 0 });
+        stopCountdown(); try { localStorage.removeItem(lsKey()); } catch (e) {}
+        $('fgCode').value = ''; resetPwBlock('fg');
+        await reload(); show('sOpen'); resetIdle();
+        toast('กู้คืนสำเร็จ ตั้งรหัสผ่านใหม่แล้ว');
+    } catch (e) {
+        console.error(e); msg.textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
+    } finally {
+        busy = false; $('fgBtn').textContent = 'กู้คืนและตั้งรหัสผ่านใหม่'; updatePwBlock('fg');
+    }
+}
+async function doReset() {
+    if (busy) return;
+    const v = $('rsConfirm').value.trim();
+    if (v !== 'ลบทั้งหมด') { $('rsMsg').textContent = 'พิมพ์คำว่า ลบทั้งหมด ให้ตรง'; return; }
+    if (!confirm('ยืนยันลบสมุดบันทึกเดิมทั้งหมดถาวร?')) return;
+    busy = true;
+    const { data } = await db.rpc('pn_reset_all', { p_confirm: v });
+    busy = false;
+    if (data && data.ok) {
+        $('rsConfirm').value = ''; $('rsMsg').textContent = '';
+        toast('ลบแล้ว สร้างสมุดใหม่ได้เลย');
+        await refreshStatus();
+    } else $('rsMsg').textContent = 'ไม่สำเร็จ ลองใหม่อีกครั้ง';
+}
+
+/* ---------- ล็อกอัตโนมัติเมื่อไม่ใช้งาน ---------- */
+function resetIdle() {
+    clearTimeout(idleTimer);
+    if (!sessionPin) return;
+    idleTimer = setTimeout(() => { lockNow(true); toast('ล็อกอัตโนมัติ (ไม่ได้ใช้งาน)'); }, CONFIG.IDLE_LOCK_SECONDS * 1000);
+}
+['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(e => document.addEventListener(e, resetIdle, { passive: true }));
+
+
+/* ---------- รูปแบบบันทึก: ข้อความล้วน หรือ ข้อความ + รหัสผ่านพ่วง ---------- */
+const REVEAL_MS = 120000;   // เปิดตาได้ 2 นาที
+const MASK = '••••••••';
+let hiders = [];
+function hideAllPw() { hiders.forEach(f => f()); }
+function encodeNote(text, pw) { return pw ? JSON.stringify({ __pw: 1, t: text, p: pw }) : text; }
+function decodeNote(c) {
+    if (typeof c === 'string' && c.charAt(0) === '{') {
+        try {
+            const o = JSON.parse(c);
+            if (o && o.__pw === 1 && typeof o.p === 'string') return { text: o.t || '', pw: o.p };
+        } catch (e) {}
+    }
+    return { text: c, pw: null };
+}
+function togglePwField() {
+    const on = $('hasPw').checked;
+    $('pwWrap').classList.toggle('hidden', !on);
+    if (!on) $('pwInput').value = '';
+}
+function toggleInputEye(id, btn) {
+    const el = $(id) || btn.parentElement.querySelector('input');
+    const show = el.type === 'password';
+    el.type = show ? 'text' : 'password';
+    btn.innerHTML = '<i class="fa-solid ' + (show ? 'fa-eye' : 'fa-eye-slash') + '"></i>';
+}
+
+function buildPwRow(pw) {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 mt-2 bg-pink-50 rounded-xl px-3 py-2';
+    const icon = document.createElement('i');
+    icon.className = 'fa-solid fa-key text-pink-300 text-xs';
+    const val = document.createElement('span');
+    val.className = 'pw-val flex-1 text-sm font-mono text-gray-700';
+    val.textContent = MASK;
+    const copy = document.createElement('button');
+    copy.className = 'hidden text-gray-400 hover:text-pink-500 text-sm px-1';
+    copy.innerHTML = '<i class="fa-regular fa-copy"></i>';
+    const eye = document.createElement('button');
+    eye.className = 'text-gray-400 hover:text-pink-500 text-sm px-1';
+    eye.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+    let t = null;
+    const hide = () => {
+        clearTimeout(t); t = null;
+        val.textContent = MASK;
+        eye.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+        copy.classList.add('hidden');
+    };
+    eye.onclick = () => {
+        if (t) { hide(); return; }
+        val.textContent = pw;
+        eye.innerHTML = '<i class="fa-solid fa-eye"></i>';
+        copy.classList.remove('hidden');
+        t = setTimeout(() => { hide(); toast('ปิดตารหัสผ่านอัตโนมัติ (ครบ 2 นาที)'); }, REVEAL_MS);
+    };
+    copy.onclick = async () => {
+        try { await navigator.clipboard.writeText(pw); toast('คัดลอกรหัสผ่านแล้ว'); } catch (e) { toast('คัดลอกไม่สำเร็จ'); }
+    };
+    hiders.push(hide);
+    row.append(icon, val, copy, eye);
+    return row;
+}
+
+function renderNotes(notes) {
+    hideAllPw(); hiders = [];
+    const list = $('noteList');
+    list.innerHTML = '';
+    $('noteEmpty').classList.toggle('hidden', notes.length > 0);
+    $('noteCount').textContent = notes.length ? '(' + notes.length + ')' : '';
+    notes.forEach(n => {
+        const d = n.failed ? { text: n.content, pw: null } : decodeNote(n.content);
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-2xl border border-pink-100 p-3 shadow-sm';
+        const text = document.createElement('div');
+        text.className = 'note-text text-sm text-gray-700';
+        text.textContent = d.text;
+        card.appendChild(text);
+        if (d.pw !== null) card.appendChild(buildPwRow(d.pw));
+        const foot = document.createElement('div');
+        foot.className = 'flex items-center justify-between mt-2 pt-2 border-t border-pink-50';
+        const time = document.createElement('span');
+        time.className = 'text-[11px] text-gray-400';
+        time.textContent = new Date(n.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+        const acts = document.createElement('div');
+        acts.className = 'flex items-center gap-4';
+        const edit = document.createElement('button');
+        edit.className = 'text-[11px] text-sky-500 hover:text-sky-700 font-semibold';
+        edit.innerHTML = '<i class="fa-solid fa-pen me-1"></i>แก้ไข';
+        edit.onclick = () => startEdit(n, d, card);
+        const del = document.createElement('button');
+        del.className = 'text-[11px] text-red-400 hover:text-red-600 font-semibold';
+        del.innerHTML = '<i class="fa-solid fa-trash me-1"></i>ลบ';
+        del.onclick = () => doDelete(n.id);
+        if (n.failed) acts.append(del); else acts.append(edit, del);
+        foot.append(time, acts);
+        card.appendChild(foot);
+        list.appendChild(card);
+    });
+}
+
+/* ---------- แก้ไขบันทึก ---------- */
+function startEdit(n, d, card) {
+    card.innerHTML = '';
+    const ta = document.createElement('textarea');
+    ta.rows = 3; ta.maxLength = 3000; ta.value = d.text;
+    ta.className = 'w-full rounded-2xl border-2 border-sky-200 p-3 text-sm focus:outline-none bg-white';
+    const lab = document.createElement('label');
+    lab.className = 'flex items-center gap-2 text-sm text-gray-600 cursor-pointer mt-2';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'w-4 h-4 accent-pink-500'; cb.checked = d.pw !== null;
+    const sp = document.createElement('span'); sp.textContent = 'มีรหัสผ่านพ่วง';
+    lab.append(cb, sp);
+    const wrap = document.createElement('div');
+    wrap.className = 'relative mt-2' + (cb.checked ? '' : ' hidden');
+    const pi = document.createElement('input');
+    pi.type = 'password'; pi.maxLength = 200; pi.autocomplete = 'off'; pi.placeholder = 'รหัสผ่าน';
+    pi.value = d.pw || '';
+    pi.className = 'w-full rounded-2xl border-2 border-sky-200 py-2.5 pl-3 pr-11 text-sm focus:outline-none bg-white';
+    const eb = document.createElement('button');
+    eb.type = 'button'; eb.className = 'absolute right-3 top-1/2 -translate-y-1/2 text-gray-400';
+    eb.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+    eb.onclick = () => toggleInputEye(null, eb);
+    wrap.append(pi, eb);
+    cb.onchange = () => { wrap.classList.toggle('hidden', !cb.checked); if (!cb.checked) pi.value = ''; };
+    const msg = document.createElement('p');
+    msg.className = 'text-sm text-red-500 min-h-[1.25rem] mt-1';
+    const btns = document.createElement('div');
+    btns.className = 'flex gap-2 mt-2';
+    const ok = document.createElement('button');
+    ok.className = 'btn flex-1 grad text-white font-bold py-2 rounded-full text-sm';
+    ok.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>บันทึกการแก้ไข';
+    const cancel = document.createElement('button');
+    cancel.className = 'btn px-5 bg-gray-200 text-gray-600 font-bold py-2 rounded-full text-sm';
+    cancel.textContent = 'ยกเลิก';
+    cancel.onclick = () => reload();
+    ok.onclick = async () => {
+        if (busy || !sessionPin || !sessionDEK) return;
+        const t = ta.value;
+        if (!t.trim()) { msg.textContent = 'กรุณาพิมพ์ข้อความ'; return; }
+        if (cb.checked && !pi.value) { msg.textContent = 'กรุณาใส่รหัสผ่าน หรือเอาติ๊กออก'; return; }
+        busy = true;
+        // เพิ่มรายการใหม่ก่อน แล้วค่อยลบของเดิม (ข้อมูลจะไม่หายถ้าขั้นแรกล้มเหลว)
+        const a = await db.rpc('pn_add', { p_pin: sessionPin, p_content: await sealNote(encodeNote(t, cb.checked ? pi.value : null)) });
+        if (a.error || !a.data || !a.data.ok) { busy = false; msg.textContent = 'แก้ไขไม่สำเร็จ'; return; }
+        await db.rpc('pn_delete', { p_pin: sessionPin, p_id: n.id });
+        busy = false;
+        toast('แก้ไขเรียบร้อย');
+        await reload();
+    };
+    btns.append(ok, cancel);
+    card.append(ta, lab, wrap, msg, btns);
+    ta.focus();
+}
+
+/* ---------- ป้องกันการแคป/อัดหน้าจอ (ทำได้เท่าที่เบราว์เซอร์อนุญาต) ---------- */
+let shieldHold = 0;
+function updateShield() {
+    const need = !!sessionPin && (document.hidden || !document.hasFocus() || Date.now() < shieldHold);
+    $('shield').classList.toggle('hidden', !need);
+    if (need) hideAllPw();
+}
+function holdShield(ms) {
+    shieldHold = Date.now() + ms;
+    updateShield();
+    setTimeout(updateShield, ms + 50);
+}
+document.addEventListener('visibilitychange', updateShield);
+window.addEventListener('blur', updateShield);
+window.addEventListener('focus', updateShield);
+window.addEventListener('pagehide', updateShield);
+window.addEventListener('beforeprint', () => holdShield(3000));
+setInterval(updateShield, 400);
+document.addEventListener('contextmenu', e => { if (sessionPin) e.preventDefault(); });
+function isCaptureKey(e) {
+    if (e.key === 'PrintScreen' || e.code === 'PrintScreen') return true;
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && ['Digit3', 'Digit4', 'Digit5', 'KeyS'].includes(e.code)) return true;
+    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyP') return true;
+    return false;
+}
+document.addEventListener('keydown', e => {
+    if (sessionPin && isCaptureKey(e)) { holdShield(4000); }
+});
+document.addEventListener('keyup', e => {
+    if (sessionPin && isCaptureKey(e)) {
+        holdShield(4000);
+        try { navigator.clipboard.writeText(' '); } catch (err) {}
+    }
+});
+
+
+async function reload() {
+    const { data } = await db.rpc('pn_unlock', { p_pin: sessionPin });
+    if (data && data.ok) renderNotes(await decryptNotes(data.notes || []));
+    else if (data && (data.locked || data.tries_left !== undefined)) handleFail(data, $('unlockMsg'));
+}
+
+async function doSave() {
+    if (busy || !sessionPin || !sessionDEK) return;
+    const text = $('noteInput').value;
+    const pw = $('hasPw').checked ? $('pwInput').value : null;
+    const err = m => { $('saveMsg').className = 'text-sm text-red-500'; $('saveMsg').textContent = m; };
+    if (!text.trim()) { err('กรุณาพิมพ์ข้อมูลก่อนบันทึก'); return; }
+    if ($('hasPw').checked && !pw) { err('กรุณาใส่รหัสผ่าน หรือเอาติ๊ก "มีรหัสผ่านพ่วง" ออก'); return; }
+    busy = true;
+    let data = null, error = null;
+    try {
+        const content = await sealNote(encodeNote(text, pw));
+        ({ data, error } = await db.rpc('pn_add', { p_pin: sessionPin, p_content: content }));
+    } catch (e) { error = e; }
+    busy = false;
+    if (error || !data || !data.ok) {
+        err('บันทึกไม่สำเร็จ');
+        if (data && !data.ok && (data.locked || data.tries_left !== undefined)) { handleFail(data, $('unlockMsg')); }
+        return;
+    }
+    $('noteInput').value = ''; $('saveMsg').textContent = '';
+    $('hasPw').checked = false; togglePwField();
+    toast('บันทึกถาวรเรียบร้อย');
+    await reload();
+}
+
+async function doDelete(id) {
+    if (busy || !sessionPin) return;
+    if (!confirm('ลบบันทึกนี้ถาวรใช่ไหม?')) return;
+    busy = true;
+    const { data } = await db.rpc('pn_delete', { p_pin: sessionPin, p_id: id });
+    busy = false;
+    if (data && data.ok) { toast('ลบแล้ว'); await reload(); } else toast('ลบไม่สำเร็จ');
+}
+
+/* ---------- เปลี่ยนรหัสผ่าน (ข้อมูลไม่ต้องเข้ารหัสใหม่ แค่ล็อกกุญแจด้วยรหัสใหม่) ---------- */
+async function doChange() {
+    if (busy || !sessionDEK) return;
+    const r = pwBlockValue('chg'), old = $('oldPin').value, el = $('chgMsg');
+    el.className = 'text-sm text-red-500 min-h-[1.25rem]';
+    if (!old) { el.textContent = 'กรุณาใส่รหัสผ่านเดิม'; return; }
+    if (!r.ok) { updatePwBlock('chg'); return; }
+    busy = true; $('chgBtn').disabled = true; $('chgBtn').textContent = 'กำลังเปลี่ยน...';
+    try {
+        await tick();
+        const ok = await deriveKeys(old, status.salt, KDF_ITER);
+        const salt = b64(rand(16));
+        const nk = await deriveKeys(r.value, salt, KDF_ITER);
+        const raw = new Uint8Array(await crypto.subtle.exportKey('raw', sessionDEK));
+        const wrap_pw = await seal(nk.wrapKey, raw);
+        const { data } = await db.rpc('pn_change_password', { p_old_auth: ok.auth, p_new_auth: nk.auth, p_new_salt: salt, p_new_wrap_pw: wrap_pw });
+        if (data && data.ok) {
+            sessionPin = nk.auth; status = Object.assign({}, status, { salt });
+            $('oldPin').value = ''; resetPwBlock('chg');
+            el.className = 'text-sm text-green-600 min-h-[1.25rem]'; el.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย';
+        } else if (data && data.locked) handleFail(data, el);
+        else if (data && data.tries_left !== undefined) el.textContent = 'รหัสผ่านเดิมไม่ถูกต้อง เหลืออีก ' + data.tries_left + ' ครั้ง';
+        else el.textContent = 'เปลี่ยนรหัสผ่านไม่สำเร็จ';
+    } catch (e) { console.error(e); el.textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง'; }
+    busy = false; $('chgBtn').textContent = 'เปลี่ยนรหัสผ่าน'; updatePwBlock('chg');
+}
+
+/* ---------- ออกรหัสกู้คืนใหม่ ---------- */
+async function doRotate() {
+    if (busy || !sessionDEK) return;
+    busy = true; $('rotBtn').disabled = true; $('rotMsg').textContent = '';
+    try {
+        await tick();
+        const raw = new Uint8Array(await crypto.subtle.exportKey('raw', sessionDEK));
+        const rec = await prepareRecovery(raw);
+        showRecoveryKey(rec.code, async () => {
+            const { data } = await db.rpc('pn_rotate_recovery', { p_auth: sessionPin, p_rec_salt: rec.rec_salt, p_rec_auth: rec.rec_auth, p_wrap_rc: rec.wrap_rc });
+            if (!data || !data.ok) return false;
+            status = Object.assign({}, status, { rec_salt: rec.rec_salt });
+            pending = null; $('recCode').textContent = '';
+            show('sOpen'); resetIdle();
+            toast('ออกรหัสกู้คืนใหม่แล้ว รหัสเก่าใช้ไม่ได้อีก');
+            return true;
+        }, () => { show('sOpen'); });
+    } catch (e) { console.error(e); $('rotMsg').textContent = 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง'; }
+    busy = false; $('rotBtn').disabled = false;
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
